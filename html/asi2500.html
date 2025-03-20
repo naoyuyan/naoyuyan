@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代码块编辑器</title>
+    <!-- Monaco Editor CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.30.1/min/vs/loader.js"></script>
+    <style>
+        :root {
+            --primary-color: #3a7bd5;
+            --secondary-color: #f0f4f8;
+            --button-glow: 0 0 5px rgba(0, 0, 0, 0.1);
+            --border-radius: 4px;
+            --transition-speed: 0.2s;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            overflow: hidden;
+        }
+
+        .虚显容器 {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .虚显 {
+            height: 100%;
+            width: 100%;
+        }
+
+        .视图切换 {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            z-index: 10;
+            display: flex;
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--button-glow);
+            overflow: hidden;
+        }
+
+        .视图切换按钮 {
+            padding: 8px 15px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            transition: all var(--transition-speed);
+        }
+
+        .视图切换按钮.激活 {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .视图切换按钮:hover:not(.激活) {
+            background: rgba(0, 0, 0, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .预览区域 {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 20px;
+            overflow: auto;
+            display: none;
+        }
+
+        .虚键容器 {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .虚键开关 {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: var(--button-glow);
+            transition: all var(--transition-speed);
+        }
+
+        .虚键开关:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .虚键面板 {
+            position: absolute;
+            bottom: 60px;
+            right: 0;
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--button-glow);
+            padding: 10px;
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            max-width: 90vw;
+            overflow-x: auto;
+        }
+
+        .虚键行 {
+            display: flex;
+            gap: 5px;
+        }
+
+        .虚键按钮 {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: var(--border-radius);
+            background: white;
+            cursor: pointer;
+            box-shadow: var(--button-glow);
+            transition: all var(--transition-speed);
+        }
+
+        .虚键按钮:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .虚键按钮.切换行 {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .状态栏 {
+            height: 25px;
+            background: var(--secondary-color);
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            font-size: 12px;
+            color: #555;
+        }
+
+        .工具栏 {
+            height: 40px;
+            background: var(--secondary-color);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            gap: 10px;
+        }
+
+        .工具栏按钮 {
+            padding: 5px 10px;
+            border: none;
+            border-radius: var(--border-radius);
+            background: white;
+            cursor: pointer;
+            box-shadow: var(--button-glow);
+            transition: all var(--transition-speed);
+        }
+
+        .工具栏按钮:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .长按提示 {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: var(--border-radius);
+            pointer-events: none;
+            display: none;
+            z-index: 2000;
+        }
+    </style>
+</head>
+<body>
+    <div class="工具栏">
+        <button class="工具栏按钮" id="保存">保存代码</button>
+        <button class="工具栏按钮" id="加载">加载代码</button>
+        <button class="工具栏按钮" id="清空">清空编辑器</button>
+    </div>
+
+    <div class="虚显容器">
+        <div class="视图切换">
+            <button class="视图切换按钮 激活" data-view="代码">代码</button>
+            <button class="视图切换按钮" data-view="预览">预览</button>
+        </div>
+        <div id="虚显" class="虚显"></div>
+        <div id="预览区域" class="预览区域"></div>
+    </div>
+
+    <div class="状态栏">
+        <span id="状态">准备就绪</span>
+    </div>
+
+    <div class="虚键容器">
+        <div class="虚键开关" id="虚键开关">
+            键盘
+        </div>
+        <div class="虚键面板" id="虚键面板"></div>
+    </div>
+
+    <div class="长按提示" id="长按提示"></div>
+
+    <script>
+        // 初始化变量
+        let 当前行 = 0;
+        let 编辑器;
+        let 代码块映射 = {};
+        let 当前视图 = '代码';
+        let 长按定时器 = null;
+        let 长按触发中 = false;
+
+        // 中文代码块定义
+        // 每行25个代码块
+        const 代码块定义 = [
+            // 第一行 - HTML 相关
+            ["结", "束", "开", "始", "段", "落", "标", "题", "链", "接", "图", "像", "列", "表", "项", "目", "分", "割", "按", "钮", "输", "入", "选", "择", "框"],
+            // 第二行 - CSS 相关
+            ["样", "式", "颜", "色", "背", "景", "边", "框", "内", "距", "外", "包", "字", "体", "宽", "高", "显", "示", "浮", "动", "定", "位", "阴", "影", "过"],
+            // 第三行 - JS 基本
+            ["变", "量", "函", "数", "返", "回", "条", "件", "循", "环", "对", "象", "集", "组", "字", "符", "串", "值", "常", "真", "假", "空", "判", "断", "停"],
+            // 第四行 - JS 操作
+            ["加", "减", "乘", "除", "余", "等", "于", "大", "小", "与", "或", "非", "点", "左", "右", "引", "双", "逗", "号", "冒", "分", "问", "叹", "井", "注"],
+            // 第五行 - 常用代码片段和关键字
+            ["导", "出", "模", "块", "构", "造", "继", "承", "实", "例", "接", "口", "异", "常", "捕", "获", "抛", "调", "同", "步", "等", "待", "尝", "试", "终"]
+        ];
+
+        // 代码块的实际代码映射
+        const 代码块映射表 = {
+            // HTML 相关
+            "结": "</div>",
+            "束": "</span>",
+            "开": "<div>",
+            "始": "<span>",
+            "段": "<p></p>",
+            "落": "<br>",
+            "标": "<h1></h1>",
+            "题": "<title></title>",
+            "链": "<a href=\"\"></a>",
+            "接": "<link rel=\"stylesheet\" href=\"\">",
+            "图": "<img src=\"\" alt=\"\">",
+            "像": "<figure></figure>",
+            "列": "<ul></ul>",
+            "表": "<li></li>",
+            "项": "<table></table>",
+            "目": "<tr><td></td></tr>",
+            "分": "<hr>",
+            "割": "<section></section>",
+            "按": "<button></button>",
+            "钮": "<input type=\"button\" value=\"\">",
+            "输": "<input type=\"text\">",
+            "入": "<textarea></textarea>",
+            "选": "<select><option></option></select>",
+            "择": "<label></label>",
+            "框": "<form></form>",
+
+            // CSS 相关
+            "样": "style=\"\"",
+            "式": "class=\"\"",
+            "颜": "color: ;",
+            "色": "background-color: ;",
+            "背": "background: ;",
+            "景": "background-image: url();",
+            "边": "border: 1px solid black;",
+            "框": "border-radius: 5px;",
+            "内": "padding: 10px;",
+            "距": "margin: 10px;",
+            "外": "position: relative;",
+            "包": "position: absolute;",
+            "字": "font-family: Arial, sans-serif;",
+            "体": "font-size: 16px;",
+            "宽": "width: 100%;",
+            "高": "height: 100%;",
+            "显": "display: block;",
+            "示": "display: none;",
+            "浮": "float: left;",
+            "动": "transition: all 0.3s;",
+            "定": "position: fixed;",
+            "位": "z-index: 100;",
+            "阴": "box-shadow: 0 0 10px rgba(0,0,0,0.1);",
+            "影": "text-shadow: 1px 1px 2px #000;",
+            "过": "overflow: hidden;",
+
+            // JS 基本
+            "变": "let ",
+            "量": "const ",
+            "函": "function() {",
+            "数": "}",
+            "返": "return ",
+            "回": "=> ",
+            "条": "if () {",
+            "件": "} else {",
+            "循": "for (let i = 0; i < ; i++) {",
+            "环": "while () {",
+            "对": "const obj = {",
+            "象": "};",
+            "集": "const arr = [",
+            "组": "];",
+            "字": "\"\"",
+            "符": "\'\'",
+            "串": "`.trim()`",
+            "值": "Number()",
+            "常": "Math.",
+            "真": "true",
+            "假": "false",
+            "空": "null",
+            "判": "switch() {",
+            "断": "case: break;",
+            "停": "break;",
+
+            // JS 操作
+            "加": " + ",
+            "减": " - ",
+            "乘": " * ",
+            "除": " / ",
+            "余": " % ",
+            "等": " === ",
+            "于": " !== ",
+            "大": " > ",
+            "小": " < ",
+            "与": " && ",
+            "或": " || ",
+            "非": " ! ",
+            "点": ".",
+            "左": "(",
+            "右": ")",
+            "引": "'",
+            "双": "\"",
+            "逗": ",",
+            "号": ";",
+            "冒": ":",
+            "分": "/",
+            "问": "?",
+            "叹": "!",
+            "井": "#",
+            "注": "// ",
+
+            // 常用代码片段和关键字
+            "导": "import ",
+            "出": "export ",
+            "模": "module",
+            "块": "class",
+            "构": "constructor()",
+            "造": "super()",
+            "继": "extends",
+            "承": "implements",
+            "实": "new ",
+            "例": "this.",
+            "接": "interface ",
+            "口": "type ",
+            "异": "try {",
+            "常": "} catch (error) {",
+            "捕": "throw new Error()",
+            "获": "console.log()",
+            "抛": "console.error()",
+            "调": "debugger;",
+            "同": "async ",
+            "步": "await ",
+            "等": "Promise",
+            "待": "setTimeout(() => {}, 1000)",
+            "尝": "addEventListener(\"click\", () => {",
+            "试": "querySelector()",
+            "终": "window."
+        };
+
+        // 初始化 Monaco 编辑器
+        require.config({
+            paths: {
+                vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.30.1/min/vs'
+            }
+        });
+
+        require(['vs/editor/editor.main'], function() {
+            编辑器 = monaco.editor.create(document.getElementById('虚显'), {
+                value: '<!-- 在这里编写代码 -->\n',
+                language: 'html',
+                theme: 'vs-light',
+                automaticLayout: true,
+                minimap: {
+                    enabled: false
+                },
+                fontSize: 14,
+                scrollBeyondLastLine: false,
+                wordWrap: 'on'
+            });
+
+            // 设置编辑器更改事件
+            编辑器.onDidChangeModelContent(更新预览);
+            document.getElementById('状态').textContent = '编辑器已加载';
+        });
+
+        // 初始化虚拟键盘
+        function 初始化虚键面板() {
+            const 虚键面板 = document.getElementById('虚键面板');
+            虚键面板.innerHTML = '';
+
+            // 添加当前行的代码块按钮
+            const 行容器 = document.createElement('div');
+            行容器.className = '虚键行';
+
+            const 当前行代码块 = 代码块定义[当前行];
+            
+            for (let i = 0; i < 当前行代码块.length; i++) {
+                const 按钮 = document.createElement('div');
+                按钮.className = '虚键按钮';
+                按钮.textContent = 当前行代码块[i];
+                按钮.dataset.index = i;
+                
+                // 添加点击和长按事件
+                按钮.addEventListener('mousedown', function(e) {
+                    const 按钮元素 = e.target;
+                    长按定时器 = setTimeout(() => {
+                        长按触发中 = true;
+                        插入代码块(按钮元素.textContent, true);
+                        
+                        // 显示长按提示
+                        const 提示 = document.getElementById('长按提示');
+                        提示.textContent = `已插入代码块: ${代码块映射表[按钮元素.textContent]}`;
+                        提示.style.display = 'block';
+                        提示.style.left = `${e.clientX + 10}px`;
+                        提示.style.top = `${e.clientY - 30}px`;
+                        
+                        setTimeout(() => {
+                            提示.style.display = 'none';
+                        }, 1000);
+                        
+                    }, 1000); // 1秒长按
+                });
+                
+                按钮.addEventListener('mouseup', function(e) {
+                    clearTimeout(长按定时器);
+                    if (!长按触发中) {
+                        插入代码块(e.target.textContent);
+                    }
+                    长按触发中 = false;
+                });
+                
+                按钮.addEventListener('mouseleave', function() {
+                    clearTimeout(长按定时器);
+                    长按触发中 = false;
+                });
+                
+                行容器.appendChild(按钮);
+            }
+            
+            虚键面板.appendChild(行容器);
+            
+            // 添加行切换按钮
+            const 切换行容器 = document.createElement('div');
+            切换行容器.className = '虚键行';
+            
+            const 切换行按钮 = document.createElement('div');
+            切换行按钮.className = '虚键按钮 切换行';
+            切换行按钮.textContent = 'Z';
+            切换行按钮.addEventListener('click', 切换虚键行);
+            
+            切换行容器.appendChild(切换行按钮);
+            虚键面板.appendChild(切换行容器);
+        }
+
+        // 切换虚键行
+        function 切换虚键行() {
+            当前行 = (当前行 + 1) % 代码块定义.length;
+            初始化虚键面板();
+            document.getElementById('状态').textContent = `当前行: ${当前行 + 1}`;
+        }
+
+        // 插入代码块
+        function 插入代码块(字符, 是长按 = false) {
+            if (!编辑器) return;
+            
+            const 插入内容 = 是长按 ? (代码块映射表[字符] || 字符) : 字符;
+            const 选择 = 编辑器.getSelection();
+            const 操作 = {
+                range: 选择,
+                text: 插入内容,
+                forceMoveMarkers: true
+            };
+            
+            编辑器.executeEdits('键盘输入', [操作]);
+            编辑器.focus();
+        }
+
+        // 更新预览
+        function 更新预览() {
+            if (当前视图 !== '预览') return;
+            
+            const 代码 = 编辑器.getValue();
+            const 预览区域 = document.getElementById('预览区域');
+            
+            try {
+                预览区域.innerHTML = 代码;
+                document.getElementById('状态').textContent = '预览已更新';
+            } catch (错误) {
+                document.getElementById('状态').textContent = `预览错误: ${错误.message}`;
+            }
+        }
+
+        // 切换视图
+        function 切换视图(视图) {
+            当前视图 = 视图;
+            const 按钮列表 = document.querySelectorAll('.视图切换按钮');
+            const 预览区域 = document.getElementById('预览区域');
+            const 编辑器元素 = document.getElementById('虚显');
+            
+            按钮列表.forEach(按钮 => {
+                if (按钮.dataset.view === 视图) {
+                    按钮.classList.add('激活');
+                } else {
+                    按钮.classList.remove('激活');
+                }
+            });
+            
+            if (视图 === '预览') {
+                预览区域.style.display = 'block';
+                编辑器元素.style.display = 'none';
+                更新预览();
+            } else {
+                预览区域.style.display = 'none';
+                编辑器元素.style.display = 'block';
+            }
+        }
+
+        // 保存代码到本地
+        function 保存代码() {
+            if (!编辑器) return;
+            
+            const 代码 = 编辑器.getValue();
+            localStorage.setItem('savedCode', 代码);
+            document.getElementById('状态').textContent = '代码已保存到本地存储';
+        }
+
+        // 从本地加载代码
+        function 加载代码() {
+            const 保存的代码 = localStorage.getItem('savedCode');
+            
+            if (保存的代码 && 编辑器) {
+                编辑器.setValue(保存的代码);
+                document.getElementById('状态').textContent = '代码已从本地存储加载';
+            } else {
+                document.getElementById('状态').textContent = '没有找到保存的代码';
+            }
+        }
+
+        // 清空编辑器
+        function 清空编辑器() {
+            if (编辑器) {
+                if (confirm('确定要清空编辑器吗？')) {
+                    编辑器.setValue('<!-- 在这里编写代码 -->\n');
+                    document.getElementById('状态').textContent = '编辑器已清空';
+                }
+            }
+        }
+
+        // 事件监听
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化虚键面板
+            初始化虚键面板();
+            
+            // 虚键开关点击事件
+            document.getElementById('虚键开关').addEventListener('click', function() {
+                const 虚键面板 = document.getElementById('虚键面板');
+                if (虚键面板.style.display === 'flex') {
+                    虚键面板.style.display = 'none';
+                } else {
+                    虚键面板.style.display = 'flex';
+                }
+            });
+            
+            // 视图切换按钮点击事件
+            document.querySelectorAll('.视图切换按钮').forEach(按钮 => {
+                按钮.addEventListener('click', function() {
+                    切换视图(this.dataset.view);
+                });
+            });
+            
+            // 工具栏按钮点击事件
+            document.getElementById('保存').addEventListener('click', 保存代码);
+            document.getElementById('加载').addEventListener('click', 加载代码);
+            document.getElementById('清空').addEventListener('click', 清空编辑器);
+            
+            // 检查是否有保存的代码
+            if (localStorage.getItem('savedCode')) {
+                document.getElementById('状态').textContent = '有保存的代码可供加载';
+            }
+        });
+    </script>
+</body>
+</html>
