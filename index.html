@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=0">
+<meta name="Generator" content="xuniren.com">
+<meta name="Author" content="广">
+<meta name="Keywords" content="naoyuyan,脑语言,asi,卷,xuniren,虚拟人,xushijie,虚世界">
+<meta name="Description" content="人与ASI共处的方式">
+<title>asiregexp 卷正则表达式</title>
+<style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{height:100vh;width:100%;display:flex;flex-direction:column;font-family:宋体,SimSun}
+    #工具栏{background:#f5f5f5;padding:10px;border-bottom:1px solid #ddd;display:flex;gap:8px}
+    .输入框{flex:1;padding:6px;border:1px solid #ccc;border-radius:4px}
+    .按钮{padding:6px 12px;background:#0078d4;color:white;border:none;border-radius:4px;cursor:pointer}
+    #编辑器容器{flex:1;position:relative}
+    #状态栏{background:#f5f5f5;padding:8px 10px;border-top:1px solid #ddd;display:flex;justify-content:space-between}
+    .错误提示{color:#dc3545;background:#ffeef0;padding:4px 8px;border-radius:4px}
+</style>
+</head>
+<body>
+    <div id="工具栏">
+        <input id="正则输入" class="输入框" placeholder="输入正则表达式">
+        <select id="修饰符选择" class="输入框">
+            <option value="g">全局匹配(g)</option>
+            <option value="i">忽略大小写(i)</option>
+            <option value="m">多行模式(m)</option>
+        </select>
+        <button onclick="执行测试()" class="按钮">测试</button>
+    </div>
+
+    <div id="编辑器容器">
+        <div id="脑" style="width:100%;height:100%">
+        </div>
+    </div>
+
+    <div id="状态栏">
+        <span id="统计信息">就绪</span>
+        <span id="错误提示" class="错误提示" style="display:none"></span>
+    </div>
+
+    <script src="https://unpkg.com/monaco-editor@0.52.2/min/vs/loader.js"></script>
+    <script>
+        var 公摩 = null;
+
+        window.onload = function() {
+            require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.52.2/min/vs' }});
+            require(['vs/editor/editor.main'], function() {
+            公摩 = monaco.editor.create(document.getElementById('脑'), {
+                value: '在此输入测试文本...\n第二行示例内容',
+                language: 'html',
+                theme: 'vs',
+                fontFamily: '宋体',
+                automaticLayout: true,
+                scrollBeyondLastLine: false
+            });
+            });
+        };
+
+        function 执行测试() {
+            const 正则模式 = document.getElementById('正则输入').value;
+            const 修饰符 = document.getElementById('修饰符选择').value;
+            const 测试内容 = 公摩.getValue();
+            
+            document.getElementById('错误提示').style.display = 'none';
+            
+            try {
+            const 正则对象 = new RegExp(正则模式, 修饰符);
+            const 匹配结果 = 测试内容.match(正则对象) || [];
+            
+            document.getElementById('统计信息').textContent = `匹配到 ${匹配结果.length} 处结果`;
+            if(匹配结果.length > 0) document.getElementById('统计信息').textContent += `，首项：${匹配结果[0]}`;
+            } catch (错误信息) {
+            document.getElementById('错误提示').style.display = 'inline';
+            document.getElementById('错误提示').textContent = 错误信息;
+            document.getElementById('统计信息').textContent = '正则表达式错误';
+            }
+        }
+    </script>
+</body>
+</html>
